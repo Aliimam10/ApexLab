@@ -24,6 +24,7 @@ uv sync --dev
 uv run python -m racing_line.prepare_track --download
 uv run python -m racing_line.simulate_lap
 uv run python -m racing_line.optimise_line
+uv run python -m racing_line.export_web_data
 uv run python -m pytest
 ```
 
@@ -47,7 +48,22 @@ Run without `--download` after the initial download:
 uv run python -m racing_line.prepare_track
 uv run python -m racing_line.simulate_lap
 uv run python -m racing_line.optimise_line
+uv run python -m racing_line.export_web_data
 ```
+
+## Interactive replay
+
+The local browser viewer is in `web/`. Generate its simulation input, then
+serve the project with any static server:
+
+```bash
+uv run python -m racing_line.export_web_data
+python -m http.server 8080 -d web
+```
+
+Open `http://localhost:8080`. The replay switches between centreline and
+optimised line, animates the car using the calculated segment times, and shows
+the live timer, speed, driving state, boundary limits, and validation metrics.
 
 ## Centreline vehicle model
 

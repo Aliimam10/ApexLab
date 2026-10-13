@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="ApexLab physics-based racing-line replay." />
+    <title>ApexLab — Silverstone replay</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header>
+        <p class="eyebrow">APEXLAB / MINIMUM-TIME REPLAY</p>
+        <div class="title-row"><h1>Silverstone fastest line</h1><span id="run-status">READY</span></div>
+        <p class="subhead">A physics-based, spline-controlled solution compared with the centreline baseline.</p>
+      </header>
+      <section class="metrics" aria-label="Live simulation metrics">
+        <article><span>Lap timer</span><strong id="timer">0:00.000</strong></article>
+        <article><span>Speed</span><strong id="speed">0 <small>km/h</small></strong></article>
+        <article><span>Driving state</span><strong id="state">READY</strong></article>
+        <article><span>Fastest-line gain</span><strong id="gain">—</strong></article>
+      </section>
+      <section class="layout">
+        <div class="track-card">
+          <div class="card-bar"><span id="line-label">OPTIMISED LINE</span><span class="legend"><i class="right"></i>right limit <i class="left"></i>left limit</span></div>
+          <svg id="track" viewBox="0 0 1000 760" role="img" aria-label="Silverstone track replay"></svg>
+        </div>
+        <aside class="panel">
+          <h2>Replay controls</h2>
+          <label for="line-select">Line to replay</label>
+          <select id="line-select"><option value="optimised">Optimised fastest line</option><option value="baseline">Centreline baseline</option></select>
+          <div class="buttons"><button id="play">Play</button><button id="reset" class="quiet">Reset</button></div>
+          <label for="rate">Playback rate <output id="rate-output">1×</output></label>
+          <input id="rate" type="range" min="0.5" max="3" step="0.5" value="1" />
+          <h2>Validation</h2>
+          <dl id="validation"></dl>
+          <p class="note">The displayed line is the best feasible result found within the configured numerical search budget, not a claim of global optimality.</p>
+        </aside>
+      </section>
+    </main>
+    <script src="app.js"></script>
+  </body>
+</html>
