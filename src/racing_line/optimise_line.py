@@ -19,8 +19,10 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Optimise a feasible Silverstone racing line.")
     parser.add_argument("--download", action="store_true", help="Download source data before optimising.")
     parser.add_argument("--spacing", type=float, default=5.0, help="Track sample spacing in metres.")
-    parser.add_argument("--control-points", type=int, default=12, help="Number of spline control points.")
-    parser.add_argument("--maxiter", type=int, default=25, help="Maximum SLSQP iterations.")
+    parser.add_argument("--control-points", type=int, default=80, help="Final spline control-point count.")
+    parser.add_argument("--coarse-control-points", type=int, default=20, help="Broad first-stage controls.")
+    parser.add_argument("--maxiter", type=int, default=500, help="Final-stage SLSQP safety cap.")
+    parser.add_argument("--coarse-maxiter", type=int, default=200, help="First-stage SLSQP safety cap.")
     parser.add_argument("--root", type=Path, default=Path.cwd(), help="Project root containing data/ and output/.")
     return parser.parse_args()
 
@@ -37,7 +39,12 @@ def main() -> None:
     points, right_width, left_width = load_track_csv(raw_path)
     track = preprocess_track(points, right_width, left_width, spacing_m=args.spacing)
     result = optimise_racing_line(
-        track, default_car(), control_count=args.control_points, max_iterations=args.maxiter
+        track,
+        default_car(),
+        control_count=args.control_points,
+        coarse_control_count=args.coarse_control_points,
+        max_iterations=args.maxiter,
+        coarse_max_iterations=args.coarse_maxiter,
     )
     processed = root / "data" / "processed"
     processed.mkdir(parents=True, exist_ok=True)
@@ -55,9 +62,11 @@ def main() -> None:
         "optimised_lap_time_s": round(result.simulation.lap_time_s, 3),
         "improvement_s": round(result.lap_time_improvement_s, 3),
         "improvement_percent": round(result.lap_time_improvement_percent, 3),
-        "minimum_boundary_clearance_m": round(float(np.min(np.minimum(track.right_width - result.offset_m, track.left_width + result.offset_m))), 3),
+        "minimum_legal_wheel_clearance_m": round(result.minimum_clearance_m, 3),
+        "curb_wheel_fraction": round(result.curb_wheel_fraction, 4),
         "maximum_tyre_utilisation": round(result.simulation.max_tyre_utilisation, 4),
         "control_points": args.control_points,
+        "coarse_control_points": result.coarse_control_count,
         "solver_success": result.solver_success,
         "solver_message": result.solver_message,
         "solver_iterations": result.solver_iterations,

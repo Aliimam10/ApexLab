@@ -10,10 +10,12 @@ and calculates the fastest *feasible centreline* speed profile. It does not
 yet optimise the racing line; that belongs to the next commit, so the dynamics
 model remains independently testable.
 
-The third slice adds the fastest-line calculation: 12 bounded lateral control
-points are expanded into a periodic cubic spline. The optimiser minimises
-simulated lap time while checking the full interpolated path against both track
-boundaries and the existing tyre-force constraints.
+The third slice adds the fastest-line calculation: a broad 20-control solution
+is expanded into an 80-control periodic cubic spline. The optimiser minimises
+simulated lap time while checking all four wheel centres every metre against
+the legal asphalt-plus-curb envelope and the existing tyre-force constraints.
+The current curb geometry is a declared 1.5 m uniform strip with 90% asphalt
+grip; it is a reproducible modelling assumption, not surveyed curb data.
 
 ## Run the first slice
 

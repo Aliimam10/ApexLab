@@ -126,8 +126,12 @@ def rolling_resistance_n(speed_mps: float | FloatArray, car: CarModel) -> float 
     return car.rolling_resistance_coefficient * normal_load_n(speed_mps, car)
 
 
-def tyre_force_limit_n(speed_mps: float | FloatArray, car: CarModel) -> float | FloatArray:
-    return car.tyre_friction_coefficient * normal_load_n(speed_mps, car)
+def tyre_force_limit_n(
+    speed_mps: float | FloatArray, car: CarModel, grip_scale: float | FloatArray = 1.0
+) -> float | FloatArray:
+    """Return friction-circle capacity, optionally reduced by surface grip."""
+
+    return car.tyre_friction_coefficient * np.asarray(grip_scale) * normal_load_n(speed_mps, car)
 
 
 def lateral_force_n(speed_mps: float | FloatArray, curvature_per_m: float | FloatArray, car: CarModel) -> float | FloatArray:
@@ -135,23 +139,25 @@ def lateral_force_n(speed_mps: float | FloatArray, curvature_per_m: float | Floa
 
 
 def available_longitudinal_tyre_force_n(
-    speed_mps: float, curvature_per_m: float, car: CarModel
+    speed_mps: float, curvature_per_m: float, car: CarModel, grip_scale: float = 1.0
 ) -> float:
     """Remaining friction-circle capacity after supplying lateral force."""
 
-    total_limit = float(tyre_force_limit_n(speed_mps, car))
+    total_limit = float(tyre_force_limit_n(speed_mps, car, grip_scale))
     lateral = float(lateral_force_n(speed_mps, curvature_per_m, car))
     return float(np.sqrt(max(total_limit**2 - lateral**2, 0.0)))
 
 
-def corner_speed_limit_mps(curvature_per_m: float, car: CarModel) -> float:
+def corner_speed_limit_mps(
+    curvature_per_m: float, car: CarModel, grip_scale: float = 1.0
+) -> float:
     """Solve `m v² |k| <= mu (m g + downforce(v))` by bisection."""
 
     if abs(curvature_per_m) < 1e-10:
         return car.max_speed_mps
 
     def lateral_margin(speed: float) -> float:
-        return float(tyre_force_limit_n(speed, car) - lateral_force_n(speed, curvature_per_m, car))
+        return float(tyre_force_limit_n(speed, car, grip_scale) - lateral_force_n(speed, curvature_per_m, car))
 
     if lateral_margin(car.max_speed_mps) >= 0.0:
         return car.max_speed_mps
@@ -166,27 +172,37 @@ def corner_speed_limit_mps(curvature_per_m: float, car: CarModel) -> float:
     return low
 
 
-def drive_acceleration_mps2(speed_mps: float, curvature_per_m: float, car: CarModel) -> float:
+def drive_acceleration_mps2(
+    speed_mps: float, curvature_per_m: float, car: CarModel, grip_scale: float = 1.0
+) -> float:
     """Maximum longitudinal acceleration at a speed and path curvature."""
 
-    remaining_tyre_force = available_longitudinal_tyre_force_n(speed_mps, curvature_per_m, car)
+    remaining_tyre_force = available_longitudinal_tyre_force_n(
+        speed_mps, curvature_per_m, car, grip_scale
+    )
     power_force = car.max_power_w / max(speed_mps, 1.0)
     drive_force = min(car.max_drive_force_n, power_force, remaining_tyre_force)
     resistance = float(drag_n(speed_mps, car) + rolling_resistance_n(speed_mps, car))
     return max((drive_force - resistance) / car.mass_kg, 0.0)
 
 
-def brake_deceleration_mps2(speed_mps: float, curvature_per_m: float, car: CarModel) -> float:
+def brake_deceleration_mps2(
+    speed_mps: float, curvature_per_m: float, car: CarModel, grip_scale: float = 1.0
+) -> float:
     """Maximum positive deceleration magnitude at a speed and curvature."""
 
-    remaining_tyre_force = available_longitudinal_tyre_force_n(speed_mps, curvature_per_m, car)
+    remaining_tyre_force = available_longitudinal_tyre_force_n(
+        speed_mps, curvature_per_m, car, grip_scale
+    )
     braking_force = min(car.max_brake_force_n, remaining_tyre_force)
     resistance = float(drag_n(speed_mps, car) + rolling_resistance_n(speed_mps, car))
     return (braking_force + resistance) / car.mass_kg
 
 
-def _forward_reachable_speed(speed_mps: float, distance_m: float, curvature_per_m: float, car: CarModel) -> float:
-    acceleration = drive_acceleration_mps2(speed_mps, curvature_per_m, car)
+def _forward_reachable_speed(
+    speed_mps: float, distance_m: float, curvature_per_m: float, car: CarModel, grip_scale: float
+) -> float:
+    acceleration = drive_acceleration_mps2(speed_mps, curvature_per_m, car, grip_scale)
     return min(car.max_speed_mps, float(np.sqrt(speed_mps**2 + 2.0 * acceleration * distance_m)))
 
 
@@ -196,6 +212,7 @@ def _maximum_brakeable_entry_speed(
     curvature_per_m: float,
     car: CarModel,
     upper_bound_mps: float,
+    grip_scale: float,
 ) -> float:
     """Find the greatest speed that can reach `exit_speed_mps` in one segment.
 
@@ -205,7 +222,7 @@ def _maximum_brakeable_entry_speed(
     """
 
     def is_feasible(entry_speed: float) -> bool:
-        deceleration = brake_deceleration_mps2(entry_speed, curvature_per_m, car)
+        deceleration = brake_deceleration_mps2(entry_speed, curvature_per_m, car, grip_scale)
         minimum_exit_squared = max(entry_speed**2 - 2.0 * deceleration * distance_m, 0.0)
         return minimum_exit_squared <= exit_speed_mps**2 + 1e-9
 
@@ -221,11 +238,13 @@ def _maximum_brakeable_entry_speed(
     return low
 
 
-def _force_trace(track: ProcessedTrack, speed_mps: FloatArray, car: CarModel) -> tuple[FloatArray, FloatArray, FloatArray, FloatArray]:
+def _force_trace(
+    track: ProcessedTrack, speed_mps: FloatArray, car: CarModel, grip_scale: FloatArray
+) -> tuple[FloatArray, FloatArray, FloatArray, FloatArray]:
     next_speed = np.roll(speed_mps, -1)
     acceleration = (np.square(next_speed) - np.square(speed_mps)) / (2.0 * track.segment_length)
     lateral = np.asarray(lateral_force_n(speed_mps, track.curvature, car), dtype=np.float64)
-    tyre_limit = np.asarray(tyre_force_limit_n(speed_mps, car), dtype=np.float64)
+    tyre_limit = np.asarray(tyre_force_limit_n(speed_mps, car, grip_scale), dtype=np.float64)
     resistance = np.asarray(drag_n(speed_mps, car) + rolling_resistance_n(speed_mps, car))
     longitudinal_tyre = car.mass_kg * acceleration + resistance
     utilisation = np.sqrt(np.square(longitudinal_tyre) + np.square(lateral)) / tyre_limit
@@ -238,6 +257,7 @@ def simulate_centreline_lap(
     *,
     convergence_tolerance_mps: float = 1e-6,
     max_iterations: int = 2_000,
+    grip_scale: FloatArray | None = None,
 ) -> LapSimulation:
     """Calculate the fastest feasible closed-lap speed profile on a centreline.
 
@@ -250,8 +270,15 @@ def simulate_centreline_lap(
     if convergence_tolerance_mps <= 0.0 or max_iterations <= 0:
         raise DynamicsError("Convergence tolerance and iteration count must be positive.")
 
+    if grip_scale is None:
+        grip = np.ones(track.sample_count, dtype=np.float64)
+    else:
+        grip = np.asarray(grip_scale, dtype=np.float64)
+        if grip.shape != (track.sample_count,) or not np.all(np.isfinite(grip)) or np.any(grip <= 0.0):
+            raise DynamicsError("Surface grip scale must be finite, positive, and match the track samples.")
     corner_limits = np.asarray(
-        [corner_speed_limit_mps(curvature, car) for curvature in track.curvature], dtype=np.float64
+        [corner_speed_limit_mps(curvature, car, scale) for curvature, scale in zip(track.curvature, grip, strict=True)],
+        dtype=np.float64,
     )
     speed = corner_limits.copy()
     count = track.sample_count
@@ -261,7 +288,7 @@ def simulate_centreline_lap(
         for index in range(count):
             next_index = (index + 1) % count
             reachable = _forward_reachable_speed(
-                speed[index], track.segment_length[index], track.curvature[index], car
+                speed[index], track.segment_length[index], track.curvature[index], car, grip[index]
             )
             speed[next_index] = min(speed[next_index], reachable)
 
@@ -273,6 +300,7 @@ def simulate_centreline_lap(
                 track.curvature[index],
                 car,
                 upper_bound_mps=speed[index],
+                grip_scale=grip[index],
             )
 
         if float(np.max(np.abs(speed - previous))) < convergence_tolerance_mps:
@@ -280,7 +308,7 @@ def simulate_centreline_lap(
     else:
         raise DynamicsError("Centreline speed profile did not converge.")
 
-    acceleration, lateral, longitudinal_tyre, utilisation = _force_trace(track, speed, car)
+    acceleration, lateral, longitudinal_tyre, utilisation = _force_trace(track, speed, car, grip)
     segment_time = 2.0 * track.segment_length / (speed + np.roll(speed, -1))
     simulation = LapSimulation(
         car=car,
@@ -289,7 +317,7 @@ def simulate_centreline_lap(
         longitudinal_acceleration_mps2=acceleration,
         lateral_force_n=lateral,
         longitudinal_tyre_force_n=longitudinal_tyre,
-        tyre_force_limit_n=np.asarray(tyre_force_limit_n(speed, car), dtype=np.float64),
+        tyre_force_limit_n=np.asarray(tyre_force_limit_n(speed, car, grip), dtype=np.float64),
         tyre_utilisation=utilisation,
         segment_time_s=segment_time,
         lap_time_s=float(np.sum(segment_time)),
