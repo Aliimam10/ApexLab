@@ -1,4 +1,4 @@
-# Racing line simulator
+# ApexLab
 
 This directory is a self-contained, physics-based racing-line project. The
 first slice deliberately implements geometry only: it downloads a public
