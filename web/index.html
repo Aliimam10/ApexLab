@@ -19,6 +19,7 @@
         <article><span>Speed</span><strong id="speed">0 <small>km/h</small></strong></article>
         <article><span>Driving state</span><strong id="state">READY</strong></article>
         <article><span>Fastest-line gain</span><strong id="gain">—</strong></article>
+        <article><span>Live battery energy</span><strong id="live-energy">0.000 <small>kWh</small></strong></article>
       </section>
       <section class="layout">
         <div class="track-card">
@@ -28,7 +29,13 @@
         <aside class="panel">
           <h2>Replay controls</h2>
           <label for="line-select">Line to replay</label>
-          <select id="line-select"><option value="optimised">Optimised fastest line</option><option value="baseline">Centreline baseline</option></select>
+          <select id="line-select">
+            <option value="optimised">Fastest profile</option>
+            <option value="efficient_1">Energy-aware · +1% lap time</option>
+            <option value="efficient_3">Energy-aware · +3% lap time</option>
+            <option value="efficient_5">Energy-aware · +5% lap time</option>
+            <option value="baseline">Centreline baseline</option>
+          </select>
           <div class="buttons"><button id="play">Play</button><button id="reset" class="quiet">Reset</button></div>
           <label for="rate">Playback rate <output id="rate-output">1×</output></label>
           <input id="rate" type="range" min="0.5" max="3" step="0.5" value="1" />
@@ -43,6 +50,13 @@
           <span id="profile-label">OPTIMISED LINE · VELOCITY VS TIME</span>
         </div>
         <svg id="speed-profile" viewBox="0 0 1000 250" role="img" aria-label="Calculated velocity against lap time"></svg>
+      </section>
+      <section class="energy-card" aria-labelledby="pareto-title">
+        <div class="chart-bar">
+          <div><span class="eyebrow">TIME–ENERGY TRADE-OFF</span><h2 id="pareto-title">Fixed-line Pareto frontier</h2></div>
+          <span id="energy-summary">FASTEST PROFILE · —</span>
+        </div>
+        <svg id="pareto-chart" viewBox="0 0 1000 250" role="img" aria-label="Lap time and battery energy Pareto frontier"></svg>
       </section>
     </main>
     <script src="app.js"></script>

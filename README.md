@@ -67,9 +67,16 @@ uv run python -m racing_line.export_web_data
 python -m http.server 8080 -d web
 ```
 
-Open `http://localhost:8080`. The replay switches between centreline and
-optimised line, animates the car using the calculated segment times, and shows
-the live timer, speed, driving state, boundary limits, and validation metrics.
+Open `http://localhost:8080`. The replay switches between the centreline,
+fastest profile, and independently converged +1%, +3%, and +5% energy-aware
+profiles. It animates the car using calculated segment times and shows the
+live timer, speed, battery energy, regenerative versus friction braking,
+boundary limits, validation metrics, and a time--energy Pareto chart.
+
+The energy-aware profiles retain the validated fastest racing line and alter
+only the speed/braking plan. Their Pareto points are therefore a comparison of
+the time cost of energy saving on one fixed path, not a new joint
+line-and-energy optimisation.
 
 ## Centreline vehicle model
 
@@ -169,8 +176,9 @@ uv run python -m racing_line.pareto_energy --allowances 0,1,3,5
 ```
 
 The command writes a JSON table, NumPy speed traces, and
-`output/silverstone_energy_pareto.png`. This makes the time-versus-energy
-trade-off inspectable before the browser comparison view is added.
+`output/silverstone_energy_pareto.png`. The same independently converged
+profiles are also exported to the local browser viewer by
+`export_web_data.py` for an interactive comparison.
 
 ## Geometry convention
 

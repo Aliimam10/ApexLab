@@ -8,15 +8,45 @@ from pathlib import Path
 
 import numpy as np
 
-from .dynamics import default_car
-from .energy import analyse_lap_energy
+from .dynamics import LapSimulation, default_car
+from .energy import LapEnergy, analyse_lap_energy
+from .energy_pareto import generate_energy_pareto_frontier
 from .geometry import load_track_csv, preprocess_track
-from .optimisation import optimise_racing_line
+from .optimisation import CurbModel, VehicleFootprint, footprint_report, optimise_racing_line
 from .source import download_silverstone
 
 
 def _array(values: np.ndarray) -> list[float] | list[list[float]]:
     return np.round(values, 5).tolist()
+
+
+def _energy_payload(energy: LapEnergy) -> dict[str, float | list[float]]:
+    """Return the energy fields the browser needs for a live replay."""
+
+    # ``LapEnergy`` is intentionally kept out of the public JSON schema: this
+    # compact payload is stable and contains both whole-lap and live segments.
+    return {
+        "net_battery_energy_kwh": energy.net_battery_energy_kwh,
+        "wheel_energy_kwh": energy.wheel_energy_j / 3_600_000.0,
+        "recovered_energy_kwh": energy.recovered_energy_j / 3_600_000.0,
+        "battery_draw_segment_j": _array(energy.battery_draw_energy_j),
+        "recovered_segment_j": _array(energy.recovered_segment_energy_j),
+        "friction_brake_segment_j": _array(energy.friction_brake_energy_j),
+    }
+
+
+def _simulation_payload(
+    simulation: LapSimulation, energy: LapEnergy
+) -> dict[str, float | list[float] | dict[str, float | list[float]]]:
+    """Serialise one already feasible speed profile."""
+
+    return {
+        "lap_time_s": simulation.lap_time_s,
+        "speed_mps": _array(simulation.speed_mps),
+        "acceleration_mps2": _array(simulation.longitudinal_acceleration_mps2),
+        "segment_time_s": _array(simulation.segment_time_s),
+        "energy": _energy_payload(energy),
+    }
 
 
 def parse_args() -> argparse.Namespace:
@@ -39,6 +69,34 @@ def main() -> None:
     result = optimise_racing_line(track, default_car())
     baseline_energy = analyse_lap_energy(track, result.baseline)
     optimised_energy = analyse_lap_energy(result.track, result.simulation)
+    surface = footprint_report(track, result.track, VehicleFootprint(), CurbModel())
+    frontier = generate_energy_pareto_frontier(
+        result.track,
+        default_car(),
+        result.simulation,
+        grip_scale=surface.grip_scale,
+    )
+    energy_profiles = {}
+    pareto_points = []
+    for point in frontier.points:
+        profile_id = "optimised" if point.time_allowance_fraction == 0.0 else f"efficient_{point.time_allowance_fraction * 100:.0f}"
+        profile = _simulation_payload(point.simulation, point.energy)
+        profile.update(
+            {
+                "id": profile_id,
+                "label": point.label,
+                "time_allowance_percent": point.time_allowance_fraction * 100.0,
+                "energy_saved_kwh": frontier.fastest_point.net_battery_energy_kwh - point.net_battery_energy_kwh,
+                "energy_saved_percent": 100.0
+                * (frontier.fastest_point.net_battery_energy_kwh - point.net_battery_energy_kwh)
+                / frontier.fastest_point.net_battery_energy_kwh,
+                "solver_success": point.plan is None or point.plan.solver_success,
+                "solver_iterations": 0 if point.plan is None else point.plan.solver_iterations,
+            }
+        )
+        pareto_points.append(profile)
+        if profile_id != "optimised":
+            energy_profiles[profile_id] = profile
     payload = {
         "track_name": "Silverstone Grand Prix Circuit",
         "track": {
@@ -46,29 +104,13 @@ def main() -> None:
             "left_boundary": _array(track.left_boundary),
             "right_boundary": _array(track.right_boundary),
         },
-        "baseline": {
-            "lap_time_s": result.baseline.lap_time_s,
-            "speed_mps": _array(result.baseline.speed_mps),
-            "acceleration_mps2": _array(result.baseline.longitudinal_acceleration_mps2),
-            "segment_time_s": _array(result.baseline.segment_time_s),
-            "energy": {
-                "net_battery_energy_kwh": baseline_energy.net_battery_energy_kwh,
-                "wheel_energy_kwh": baseline_energy.wheel_energy_j / 3_600_000.0,
-                "recovered_energy_kwh": baseline_energy.recovered_energy_j / 3_600_000.0,
-            },
-        },
+        "baseline": _simulation_payload(result.baseline, baseline_energy),
         "optimised": {
-            "lap_time_s": result.simulation.lap_time_s,
             "line": _array(result.track.centreline),
-            "speed_mps": _array(result.simulation.speed_mps),
-            "acceleration_mps2": _array(result.simulation.longitudinal_acceleration_mps2),
-            "segment_time_s": _array(result.simulation.segment_time_s),
-            "energy": {
-                "net_battery_energy_kwh": optimised_energy.net_battery_energy_kwh,
-                "wheel_energy_kwh": optimised_energy.wheel_energy_j / 3_600_000.0,
-                "recovered_energy_kwh": optimised_energy.recovered_energy_j / 3_600_000.0,
-            },
+            **_simulation_payload(result.simulation, optimised_energy),
         },
+        "energy_profiles": energy_profiles,
+        "pareto": {"points": pareto_points},
         "metrics": {
             "improvement_s": result.lap_time_improvement_s,
             "improvement_percent": result.lap_time_improvement_percent,
