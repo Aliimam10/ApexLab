@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from .geometry import ProcessedTrack
+from .dynamics import LapSimulation
 
 
 def save_track_plot(track: ProcessedTrack, destination: Path, *, title: str = "Silverstone") -> None:
@@ -55,5 +56,49 @@ def save_track_plot(track: ProcessedTrack, destination: Path, *, title: str = "S
     axis.set_aspect("equal", adjustable="box")
     axis.grid(alpha=0.25)
     axis.legend(loc="best")
+    figure.savefig(destination, dpi=180)
+    plt.close(figure)
+
+
+def save_dynamics_plot(track: ProcessedTrack, simulation: LapSimulation, destination: Path) -> None:
+    """Save speed, longitudinal acceleration, curvature, and tyre-use charts."""
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    distance = track.arc_length
+    figure, axes = plt.subplots(4, 1, figsize=(13, 10), sharex=True, layout="constrained")
+
+    axes[0].plot(distance, simulation.speed_mps * 3.6, color="#0369a1", linewidth=1.8)
+    axes[0].plot(
+        distance,
+        simulation.corner_speed_limit_mps * 3.6,
+        color="#94a3b8",
+        linewidth=1.0,
+        linestyle="--",
+        label="Curvature limit",
+    )
+    axes[0].set_ylabel("Speed [km/h]")
+    axes[0].legend(loc="upper right")
+
+    acceleration = simulation.longitudinal_acceleration_mps2
+    axes[1].fill_between(distance, acceleration, 0.0, where=acceleration >= 0.0, color="#16a34a", alpha=0.72, label="Accelerating")
+    axes[1].fill_between(distance, acceleration, 0.0, where=acceleration < 0.0, color="#dc2626", alpha=0.72, label="Braking")
+    axes[1].axhline(0.0, color="#334155", linewidth=0.8)
+    axes[1].set_ylabel("Long. accel. [m/s²]")
+    axes[1].legend(loc="upper right")
+
+    axes[2].plot(distance, track.curvature, color="#7c3aed", linewidth=1.4)
+    axes[2].axhline(0.0, color="#334155", linewidth=0.8)
+    axes[2].set_ylabel("Curvature [1/m]")
+
+    axes[3].plot(distance, simulation.tyre_utilisation, color="#d97706", linewidth=1.5)
+    axes[3].axhline(1.0, color="#dc2626", linewidth=1.0, linestyle="--", label="Friction-circle limit")
+    axes[3].set_ylabel("Tyre utilisation [-]")
+    axes[3].set_xlabel("Distance around lap, s [m]")
+    axes[3].legend(loc="upper right")
+
+    for axis in axes:
+        axis.grid(alpha=0.25)
+        axis.set_xlim(0.0, track.total_length)
+    figure.suptitle(f"Silverstone centreline — {simulation.lap_time_s:.3f} s feasible lap")
     figure.savefig(destination, dpi=180)
     plt.close(figure)
