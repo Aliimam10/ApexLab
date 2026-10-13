@@ -27,6 +27,7 @@ uv run python -m racing_line.prepare_track --download
 uv run python -m racing_line.simulate_lap
 uv run python -m racing_line.optimise_line
 uv run python -m racing_line.plan_energy
+uv run python -m racing_line.pareto_energy
 uv run python -m racing_line.export_web_data
 uv run python -m pytest
 ```
@@ -52,6 +53,7 @@ uv run python -m racing_line.prepare_track
 uv run python -m racing_line.simulate_lap
 uv run python -m racing_line.optimise_line
 uv run python -m racing_line.plan_energy
+uv run python -m racing_line.pareto_energy
 uv run python -m racing_line.export_web_data
 ```
 
@@ -152,6 +154,23 @@ The command writes `data/processed/silverstone_energy_plan.json`, its NumPy
 trace, and `output/silverstone_energy_plan.png`. The output is accepted only
 when SLSQP converges, the lap-time constraint is met, and its net battery
 energy is no greater than the fastest profile's.
+
+## Time-energy Pareto frontier
+
+`pareto_energy.py` repeats the fixed-line planner at several allowed lap-time
+costs. The default frontier contains the fastest point plus 1%, 3%, and 5%
+allowances. A point is retained only when it is nondominated: no other reported
+point is both faster and equal-or-lower in battery energy. Each allowance is
+solved independently from the fastest profile and must converge and meet its
+own time constraint.
+
+```bash
+uv run python -m racing_line.pareto_energy --allowances 0,1,3,5
+```
+
+The command writes a JSON table, NumPy speed traces, and
+`output/silverstone_energy_pareto.png`. This makes the time-versus-energy
+trade-off inspectable before the browser comparison view is added.
 
 ## Geometry convention
 

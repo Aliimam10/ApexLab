@@ -11,6 +11,7 @@ from matplotlib.collections import LineCollection
 from .geometry import ProcessedTrack
 from .dynamics import LapSimulation
 from .energy_planning import EnergySpeedPlan
+from .energy_pareto import EnergyParetoFrontier
 from .optimisation import RacingLineResult
 
 
@@ -175,5 +176,30 @@ def save_energy_plan_plot(
         "Fixed-line energy plan — "
         f"{plan.energy_saved_percent:.2f}% battery energy saved for {plan.lap_time_cost_s:.3f} s"
     )
+    figure.savefig(destination, dpi=180)
+    plt.close(figure)
+
+
+def save_energy_pareto_plot(frontier: EnergyParetoFrontier, destination: Path) -> None:
+    """Render the nondominated lap-time versus battery-energy frontier."""
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    times = np.asarray([point.lap_time_s for point in frontier.points])
+    energies = np.asarray([point.net_battery_energy_kwh for point in frontier.points])
+    figure, axis = plt.subplots(figsize=(9, 6), layout="constrained")
+    axis.plot(times, energies, color="#16a34a", linewidth=1.8, zorder=1)
+    axis.scatter(times, energies, color="#0369a1", s=55, zorder=2)
+    for point in frontier.points:
+        axis.annotate(
+            point.label,
+            (point.lap_time_s, point.net_battery_energy_kwh),
+            xytext=(6, 6),
+            textcoords="offset points",
+            fontsize=9,
+        )
+    axis.set_xlabel("Lap time [s]")
+    axis.set_ylabel("Net battery energy [kWh]")
+    axis.set_title("Silverstone fixed-line time-energy Pareto frontier")
+    axis.grid(alpha=0.25)
     figure.savefig(destination, dpi=180)
     plt.close(figure)

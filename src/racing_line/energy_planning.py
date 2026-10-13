@@ -61,14 +61,19 @@ def _control_distances(track: ProcessedTrack, control_count: int) -> FloatArray:
     return np.linspace(0.0, track.total_length, control_count, endpoint=False)
 
 
-def _speed_factors(track: ProcessedTrack, control_distance: FloatArray, controls: FloatArray) -> FloatArray:
+def _speed_factors(
+    track: ProcessedTrack,
+    control_distance: FloatArray,
+    controls: FloatArray,
+    minimum_speed_factor: float,
+) -> FloatArray:
     spline = CubicSpline(
         np.append(control_distance, track.total_length), np.append(controls, controls[0]), bc_type="periodic"
     )
     # Individual controls are bounded, but a cubic spline can overshoot between
     # them. Clipping preserves the physical promise that this planner never
     # requests a speed above the validated minimum-time reference profile.
-    return np.clip(np.asarray(spline(track.arc_length), dtype=np.float64), 0.45, 1.0)
+    return np.clip(np.asarray(spline(track.arc_length), dtype=np.float64), minimum_speed_factor, 1.0)
 
 
 def plan_energy_efficient_speed(
@@ -82,6 +87,7 @@ def plan_energy_efficient_speed(
     control_count: int = 24,
     minimum_speed_factor: float = 0.55,
     max_iterations: int = 250,
+    initial_speed_factor: FloatArray | None = None,
 ) -> EnergySpeedPlan:
     """Minimise battery energy while keeping lap time within an allowance.
 
@@ -110,7 +116,7 @@ def plan_energy_efficient_speed(
         factors = np.asarray(controls, dtype=np.float64)
         key = factors.tobytes()
         if key not in cache:
-            dense_factors = _speed_factors(track, controls_distance, factors)
+            dense_factors = _speed_factors(track, controls_distance, factors, minimum_speed_factor)
             speed_limit = reference_simulation.speed_mps * dense_factors
             simulation = simulate_centreline_lap(
                 track, car, grip_scale=grip_scale, speed_limit_mps=speed_limit
@@ -118,7 +124,13 @@ def plan_energy_efficient_speed(
             cache[key] = (simulation, analyse_lap_energy(track, simulation, energy_model), speed_limit)
         return cache[key]
 
-    initial = np.ones(control_count, dtype=np.float64)
+    if initial_speed_factor is None:
+        initial = np.ones(control_count, dtype=np.float64)
+    else:
+        initial = np.asarray(initial_speed_factor, dtype=np.float64)
+        if initial.shape != (control_count,):
+            raise EnergyPlanningError("Initial speed factors must match the control-point count.")
+        initial = np.clip(initial, minimum_speed_factor, 1.0)
 
     def objective(controls: FloatArray) -> float:
         return evaluate(controls)[1].net_battery_energy_kwh

@@ -5,6 +5,7 @@ from .source import SILVERSTONE_SOURCE_URL, download_silverstone
 from .dynamics import CarModel, LapSimulation, default_car, simulate_centreline_lap
 from .energy import EnergyModel, LapEnergy, analyse_lap_energy
 from .energy_planning import EnergySpeedPlan, plan_energy_efficient_speed
+from .energy_pareto import EnergyParetoFrontier, ParetoPoint, generate_energy_pareto_frontier
 from .optimisation import RacingLineResult, optimise_racing_line
 
 __all__ = [
@@ -12,7 +13,9 @@ __all__ = [
     "CarModel",
     "EnergyModel",
     "EnergySpeedPlan",
+    "EnergyParetoFrontier",
     "LapEnergy",
+    "ParetoPoint",
     "LapSimulation",
     "RacingLineResult",
     "SILVERSTONE_SOURCE_URL",
@@ -21,6 +24,7 @@ __all__ = [
     "default_car",
     "analyse_lap_energy",
     "plan_energy_efficient_speed",
+    "generate_energy_pareto_frontier",
     "preprocess_track",
     "simulate_centreline_lap",
     "optimise_racing_line",
