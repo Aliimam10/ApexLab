@@ -9,6 +9,7 @@ from pathlib import Path
 import numpy as np
 
 from .dynamics import default_car
+from .energy import analyse_lap_energy
 from .geometry import load_track_csv, preprocess_track
 from .optimisation import optimise_racing_line
 from .source import download_silverstone
@@ -36,6 +37,8 @@ def main() -> None:
     points, right_width, left_width = load_track_csv(raw_path)
     track = preprocess_track(points, right_width, left_width)
     result = optimise_racing_line(track, default_car())
+    baseline_energy = analyse_lap_energy(track, result.baseline)
+    optimised_energy = analyse_lap_energy(result.track, result.simulation)
     payload = {
         "track_name": "Silverstone Grand Prix Circuit",
         "track": {
@@ -48,6 +51,11 @@ def main() -> None:
             "speed_mps": _array(result.baseline.speed_mps),
             "acceleration_mps2": _array(result.baseline.longitudinal_acceleration_mps2),
             "segment_time_s": _array(result.baseline.segment_time_s),
+            "energy": {
+                "net_battery_energy_kwh": baseline_energy.net_battery_energy_kwh,
+                "wheel_energy_kwh": baseline_energy.wheel_energy_j / 3_600_000.0,
+                "recovered_energy_kwh": baseline_energy.recovered_energy_j / 3_600_000.0,
+            },
         },
         "optimised": {
             "lap_time_s": result.simulation.lap_time_s,
@@ -55,6 +63,11 @@ def main() -> None:
             "speed_mps": _array(result.simulation.speed_mps),
             "acceleration_mps2": _array(result.simulation.longitudinal_acceleration_mps2),
             "segment_time_s": _array(result.simulation.segment_time_s),
+            "energy": {
+                "net_battery_energy_kwh": optimised_energy.net_battery_energy_kwh,
+                "wheel_energy_kwh": optimised_energy.wheel_energy_j / 3_600_000.0,
+                "recovered_energy_kwh": optimised_energy.recovered_energy_j / 3_600_000.0,
+            },
         },
         "metrics": {
             "improvement_s": result.lap_time_improvement_s,

@@ -3,17 +3,21 @@
 from .geometry import ProcessedTrack, TrackGeometryError, preprocess_track
 from .source import SILVERSTONE_SOURCE_URL, download_silverstone
 from .dynamics import CarModel, LapSimulation, default_car, simulate_centreline_lap
+from .energy import EnergyModel, LapEnergy, analyse_lap_energy
 from .optimisation import RacingLineResult, optimise_racing_line
 
 __all__ = [
     "ProcessedTrack",
     "CarModel",
+    "EnergyModel",
+    "LapEnergy",
     "LapSimulation",
     "RacingLineResult",
     "SILVERSTONE_SOURCE_URL",
     "TrackGeometryError",
     "download_silverstone",
     "default_car",
+    "analyse_lap_energy",
     "preprocess_track",
     "simulate_centreline_lap",
     "optimise_racing_line",

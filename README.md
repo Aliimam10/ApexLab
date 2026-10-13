@@ -109,6 +109,22 @@ spline sample remains within the boundaries, and friction-circle validation
 succeeds. The generated JSON reports time improvement, minimum clearance,
 maximum tyre use, control-point count, and solver status.
 
+## Energy accounting
+
+The first energy slice measures, but does not yet optimise, the energy of the
+baseline and fastest feasible laps. For every 5 m segment it integrates wheel
+work as `E_wheel = F_x ds`. Positive wheel force consumes battery energy using
+a configurable drivetrain efficiency. Negative wheel force is braking work;
+a configurable regenerative-power cap and regeneration efficiency determine
+the recoverable battery energy. The remaining braking work is reported as
+friction-brake dissipation.
+
+The initial generic assumptions are 94% drive efficiency, 65% regeneration
+efficiency, and 150 kW maximum regenerative mechanical power. They are
+explicit model inputs rather than claims about a particular F1 power unit.
+The next energy slice will optimise the speed profile subject to a lap-time
+constraint; this commit only provides the audited baseline measurements.
+
 ## Geometry convention
 
 Each centreline sample is represented in local Cartesian metres as

@@ -9,6 +9,7 @@ from pathlib import Path
 import numpy as np
 
 from .dynamics import default_car
+from .energy import analyse_lap_energy
 from .geometry import load_track_csv, preprocess_track
 from .optimisation import optimise_racing_line
 from .plotting import save_optimisation_plot
@@ -46,6 +47,8 @@ def main() -> None:
         max_iterations=args.maxiter,
         coarse_max_iterations=args.coarse_maxiter,
     )
+    baseline_energy = analyse_lap_energy(track, result.baseline)
+    optimised_energy = analyse_lap_energy(result.track, result.simulation)
     processed = root / "data" / "processed"
     processed.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(
@@ -56,6 +59,8 @@ def main() -> None:
         control_distance_m=result.control_distance_m,
         control_offset_m=result.control_offset_m,
         speed_mps=result.simulation.speed_mps,
+        baseline_battery_energy_j=baseline_energy.net_battery_energy_j,
+        optimised_battery_energy_j=optimised_energy.net_battery_energy_j,
     )
     metrics = {
         "baseline_lap_time_s": round(result.baseline.lap_time_s, 3),
@@ -70,6 +75,10 @@ def main() -> None:
         "solver_success": result.solver_success,
         "solver_message": result.solver_message,
         "solver_iterations": result.solver_iterations,
+        "baseline_net_battery_energy_kwh": round(baseline_energy.net_battery_energy_kwh, 5),
+        "optimised_net_battery_energy_kwh": round(optimised_energy.net_battery_energy_kwh, 5),
+        "baseline_recovered_energy_kwh": round(baseline_energy.recovered_energy_j / 3_600_000.0, 5),
+        "optimised_recovered_energy_kwh": round(optimised_energy.recovered_energy_j / 3_600_000.0, 5),
     }
     (processed / "silverstone_optimised_line.json").write_text(json.dumps(metrics, indent=2) + "\n", encoding="utf-8")
     save_optimisation_plot(track, result, root / "output" / "silverstone_optimised_line.png")
