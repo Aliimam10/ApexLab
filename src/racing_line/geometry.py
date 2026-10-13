@@ -133,6 +133,18 @@ def _periodic_differential_geometry(points: FloatArray) -> tuple[FloatArray, Flo
     return right_normal, heading, curvature
 
 
+def closed_path_kinematics(points: FloatArray) -> tuple[FloatArray, FloatArray, FloatArray, FloatArray]:
+    """Describe a closed path with periodic segment, distance, heading, and curvature arrays."""
+
+    points = np.asarray(points, dtype=np.float64)
+    if points.ndim != 2 or points.shape[1] != 2 or points.shape[0] < 3:
+        raise TrackGeometryError("A closed path needs at least three two-dimensional points.")
+    segment_length = _periodic_segment_lengths(points)
+    _, heading, curvature = _periodic_differential_geometry(points)
+    arc_length = np.concatenate(([0.0], np.cumsum(segment_length[:-1])))
+    return segment_length, arc_length, heading, curvature
+
+
 def preprocess_track(
     points: FloatArray,
     right_width: FloatArray,
@@ -163,11 +175,10 @@ def preprocess_track(
     points, right_width, left_width = _resample_closed_polyline(
         points, right_width, left_width, spacing_m
     )
-    segment_length = _periodic_segment_lengths(points)
-    right_normal, heading, curvature = _periodic_differential_geometry(points)
+    segment_length, arc_length, heading, curvature = closed_path_kinematics(points)
+    right_normal, _, _ = _periodic_differential_geometry(points)
     right_boundary = points + right_width[:, None] * right_normal
     left_boundary = points - left_width[:, None] * right_normal
-    arc_length = np.concatenate(([0.0], np.cumsum(segment_length[:-1])))
 
     track = ProcessedTrack(
         centreline=points,

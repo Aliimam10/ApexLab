@@ -6,9 +6,11 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.collections import LineCollection
 
 from .geometry import ProcessedTrack
 from .dynamics import LapSimulation
+from .optimisation import RacingLineResult
 
 
 def save_track_plot(track: ProcessedTrack, destination: Path, *, title: str = "Silverstone") -> None:
@@ -51,6 +53,42 @@ def save_track_plot(track: ProcessedTrack, destination: Path, *, title: str = "S
         fontsize=10,
     )
     axis.set_title(f"{title} — validated track geometry")
+    axis.set_xlabel("x [m]")
+    axis.set_ylabel("y [m]")
+    axis.set_aspect("equal", adjustable="box")
+    axis.grid(alpha=0.25)
+    axis.legend(loc="best")
+    figure.savefig(destination, dpi=180)
+    plt.close(figure)
+
+
+def save_optimisation_plot(
+    track: ProcessedTrack, result: RacingLineResult, destination: Path
+) -> None:
+    """Render boundaries, centreline baseline, and a speed-coloured racing line."""
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    figure, axis = plt.subplots(figsize=(11, 7.5), layout="constrained")
+    right = np.vstack((track.right_boundary, track.right_boundary[0]))
+    left = np.vstack((track.left_boundary, track.left_boundary[0]))
+    axis.fill(
+        np.concatenate((right[:, 0], left[::-1, 0])),
+        np.concatenate((right[:, 1], left[::-1, 1])),
+        color="#172554",
+        alpha=0.15,
+        label="Drivable surface",
+    )
+    axis.plot(right[:, 0], right[:, 1], color="#2563eb", linewidth=1.1, label="Right boundary")
+    axis.plot(left[:, 0], left[:, 1], color="#eab308", linewidth=1.1, label="Left boundary")
+    baseline = np.vstack((track.centreline, track.centreline[0]))
+    axis.plot(baseline[:, 0], baseline[:, 1], color="#94a3b8", linewidth=1.2, linestyle="--", label="Centreline baseline")
+    path = result.track.centreline
+    line = LineCollection(np.stack((path, np.roll(path, -1, axis=0)), axis=1), cmap="viridis", linewidth=3.0)
+    line.set_array(result.simulation.speed_mps * 3.6)
+    axis.add_collection(line)
+    colourbar = figure.colorbar(line, ax=axis, pad=0.02)
+    colourbar.set_label("Optimised-line speed [km/h]")
+    axis.set_title(f"Silverstone fastest feasible line — {result.lap_time_improvement_s:.3f} s faster than centreline")
     axis.set_xlabel("x [m]")
     axis.set_ylabel("y [m]")
     axis.set_aspect("equal", adjustable="box")

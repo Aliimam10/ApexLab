@@ -10,6 +10,11 @@ and calculates the fastest *feasible centreline* speed profile. It does not
 yet optimise the racing line; that belongs to the next commit, so the dynamics
 model remains independently testable.
 
+The third slice adds the fastest-line calculation: 12 bounded lateral control
+points are expanded into a periodic cubic spline. The optimiser minimises
+simulated lap time while checking the full interpolated path against both track
+boundaries and the existing tyre-force constraints.
+
 ## Run the first slice
 
 From this directory:
@@ -18,6 +23,7 @@ From this directory:
 uv sync --dev
 uv run python -m racing_line.prepare_track --download
 uv run python -m racing_line.simulate_lap
+uv run python -m racing_line.optimise_line
 uv run python -m pytest
 ```
 
@@ -31,12 +37,16 @@ Git. The preprocessing command creates:
 - `data/processed/silverstone_centreline_lap.npz` — centreline speed/force traces;
 - `data/processed/silverstone_centreline_lap.json` — lap metrics and car parameters;
 - `output/silverstone_centreline_dynamics.png` — speed, braking, curvature, and tyre-use plots.
+- `data/processed/silverstone_optimised_line.npz` — spline line, speed, and controls;
+- `data/processed/silverstone_optimised_line.json` — comparison and validation metrics;
+- `output/silverstone_optimised_line.png` — speed-coloured fastest line.
 
 Run without `--download` after the initial download:
 
 ```bash
 uv run python -m racing_line.prepare_track
 uv run python -m racing_line.simulate_lap
+uv run python -m racing_line.optimise_line
 ```
 
 ## Centreline vehicle model
@@ -64,6 +74,23 @@ friction-circle limit (apart from a small numerical tolerance). The resulting
 lap is the control case against which the next commit's optimised racing line
 will be measured.
 
+## Minimum-time line optimisation
+
+The optimiser uses lateral control-point offsets `a`, expanded to every 5 m
+track sample with a periodic cubic spline. Each candidate line is converted to
+curvature and passed through the same forward/backward vehicle-dynamics solver
+as the centreline baseline.
+
+```text
+minimise:    simulated lap time T(a)
+subject to:  -right_width(s) + clearance <= a(s) <= left_width(s) - clearance
+```
+
+The result is accepted only when it is no slower than the baseline, every
+spline sample remains within the boundaries, and friction-circle validation
+succeeds. The generated JSON reports time improvement, minimum clearance,
+maximum tyre use, control-point count, and solver status.
+
 ## Geometry convention
 
 Each centreline sample is represented in local Cartesian metres as
@@ -73,8 +100,8 @@ derivatives and distances use periodic (closed-loop) indexing.
 
 The right boundary at distance `s` is `C(s) + w_right(s) n_right(s)` and the
 left boundary is `C(s) - w_left(s) n_right(s)`, where `n_right` is the
-clockwise normal to the direction of travel. The next commit will use these
-same boundary arrays as hard constraints for the vehicle centre.
+clockwise normal to the direction of travel. The optimiser uses these same
+boundary arrays as hard constraints for the vehicle centre.
 
 ## Data provenance
 
