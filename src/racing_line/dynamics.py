@@ -258,6 +258,7 @@ def simulate_centreline_lap(
     convergence_tolerance_mps: float = 1e-6,
     max_iterations: int = 2_000,
     grip_scale: FloatArray | None = None,
+    speed_limit_mps: FloatArray | None = None,
 ) -> LapSimulation:
     """Calculate the fastest feasible closed-lap speed profile on a centreline.
 
@@ -276,10 +277,21 @@ def simulate_centreline_lap(
         grip = np.asarray(grip_scale, dtype=np.float64)
         if grip.shape != (track.sample_count,) or not np.all(np.isfinite(grip)) or np.any(grip <= 0.0):
             raise DynamicsError("Surface grip scale must be finite, positive, and match the track samples.")
-    corner_limits = np.asarray(
+    physical_corner_limits = np.asarray(
         [corner_speed_limit_mps(curvature, car, scale) for curvature, scale in zip(track.curvature, grip, strict=True)],
         dtype=np.float64,
     )
+    if speed_limit_mps is None:
+        corner_limits = physical_corner_limits
+    else:
+        requested_limit = np.asarray(speed_limit_mps, dtype=np.float64)
+        if (
+            requested_limit.shape != (track.sample_count,)
+            or not np.all(np.isfinite(requested_limit))
+            or np.any(requested_limit <= 0.0)
+        ):
+            raise DynamicsError("Speed limits must be finite, positive, and match the track samples.")
+        corner_limits = np.minimum(physical_corner_limits, requested_limit)
     speed = corner_limits.copy()
     count = track.sample_count
 

@@ -10,6 +10,7 @@ from matplotlib.collections import LineCollection
 
 from .geometry import ProcessedTrack
 from .dynamics import LapSimulation
+from .energy_planning import EnergySpeedPlan
 from .optimisation import RacingLineResult
 
 
@@ -138,5 +139,41 @@ def save_dynamics_plot(track: ProcessedTrack, simulation: LapSimulation, destina
         axis.grid(alpha=0.25)
         axis.set_xlim(0.0, track.total_length)
     figure.suptitle(f"Silverstone centreline — {simulation.lap_time_s:.3f} s feasible lap")
+    figure.savefig(destination, dpi=180)
+    plt.close(figure)
+
+
+def save_energy_plan_plot(
+    track: ProcessedTrack, plan: EnergySpeedPlan, destination: Path
+) -> None:
+    """Compare fixed-line fastest and energy-aware speed/energy traces."""
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    distance = track.arc_length
+    figure, axes = plt.subplots(2, 1, figsize=(13, 6.5), sharex=True, layout="constrained")
+    axes[0].plot(distance, plan.reference_simulation.speed_mps * 3.6, label="Fastest profile", color="#2563eb")
+    axes[0].plot(distance, plan.simulation.speed_mps * 3.6, label="Energy-aware profile", color="#16a34a")
+    axes[0].set_ylabel("Speed [km/h]")
+    axes[0].legend(loc="best")
+
+    reference_net = np.cumsum(
+        plan.reference_energy.battery_draw_energy_j - plan.reference_energy.recovered_segment_energy_j
+    ) / 3_600_000.0
+    planned_net = np.cumsum(
+        plan.energy.battery_draw_energy_j - plan.energy.recovered_segment_energy_j
+    ) / 3_600_000.0
+    axes[1].plot(distance, reference_net, label="Fastest profile", color="#2563eb")
+    axes[1].plot(distance, planned_net, label="Energy-aware profile", color="#16a34a")
+    axes[1].set_ylabel("Cumulative battery energy [kWh]")
+    axes[1].set_xlabel("Distance around lap, s [m]")
+    axes[1].legend(loc="best")
+
+    for axis in axes:
+        axis.grid(alpha=0.25)
+        axis.set_xlim(0.0, track.total_length)
+    figure.suptitle(
+        "Fixed-line energy plan — "
+        f"{plan.energy_saved_percent:.2f}% battery energy saved for {plan.lap_time_cost_s:.3f} s"
+    )
     figure.savefig(destination, dpi=180)
     plt.close(figure)

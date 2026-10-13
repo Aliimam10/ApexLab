@@ -73,3 +73,13 @@ def test_braking_is_propagated_before_a_tight_corner() -> None:
     assert simulation.speed_mps[corner_index - 3] > simulation.speed_mps[corner_index - 1]
     assert simulation.longitudinal_acceleration_mps2[corner_index - 3] < 0.0
     assert simulation.speed_mps[corner_index] <= simulation.corner_speed_limit_mps[corner_index] + 1e-6
+
+
+def test_explicit_speed_ceiling_is_respected() -> None:
+    car = no_aero_car()
+    track = artificial_track(np.zeros(80))
+    ceiling = np.full(track.sample_count, 20.0)
+
+    simulation = simulate_centreline_lap(track, car, speed_limit_mps=ceiling)
+
+    assert np.max(simulation.speed_mps) <= 20.0 + 1e-8

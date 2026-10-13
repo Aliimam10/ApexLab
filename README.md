@@ -26,6 +26,7 @@ uv sync --dev
 uv run python -m racing_line.prepare_track --download
 uv run python -m racing_line.simulate_lap
 uv run python -m racing_line.optimise_line
+uv run python -m racing_line.plan_energy
 uv run python -m racing_line.export_web_data
 uv run python -m pytest
 ```
@@ -50,6 +51,7 @@ Run without `--download` after the initial download:
 uv run python -m racing_line.prepare_track
 uv run python -m racing_line.simulate_lap
 uv run python -m racing_line.optimise_line
+uv run python -m racing_line.plan_energy
 uv run python -m racing_line.export_web_data
 ```
 
@@ -124,6 +126,32 @@ efficiency, and 150 kW maximum regenerative mechanical power. They are
 explicit model inputs rather than claims about a particular F1 power unit.
 The next energy slice will optimise the speed profile subject to a lap-time
 constraint; this commit only provides the audited baseline measurements.
+
+## Fixed-line energy speed planning
+
+`plan_energy.py` keeps the converged fastest racing line unchanged and solves
+for a lower-energy speed profile. Twenty-four bounded speed-ceiling controls
+are expanded into a periodic spline and multiply the fastest feasible speed
+profile. The existing forward/backward dynamics solver then enforces physical
+cornering, acceleration, braking, and tyre constraints below that ceiling.
+
+The numerical problem is:
+
+```text
+minimise:    net battery energy E(speed ceiling)
+subject to:  lap time <= fastest-lap time × (1 + allowance)
+```
+
+The default allowance is 3%. It is configurable, for example:
+
+```bash
+uv run python -m racing_line.plan_energy --time-allowance-percent 5
+```
+
+The command writes `data/processed/silverstone_energy_plan.json`, its NumPy
+trace, and `output/silverstone_energy_plan.png`. The output is accepted only
+when SLSQP converges, the lap-time constraint is met, and its net battery
+energy is no greater than the fastest profile's.
 
 ## Geometry convention
 
