@@ -87,7 +87,7 @@ profile as a reference for a separate feedback simulation. A kinematic bicycle
 model follows the reference using Pure Pursuit steering and a bounded PID speed
 controller. The controller's acceleration request is clipped by the existing
 power, braking, and tyre-force functions; its steering-curvature speed limit
-uses a documented 3% safety margin for discrete actuator response. It does
+uses a documented 10% safety margin for discrete actuator response. It does
 not replace the existing minimum-time vehicle model.
 
 ```bash

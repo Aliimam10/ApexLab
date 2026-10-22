@@ -379,7 +379,7 @@ class AutonomousSimulationConfig:
     boundary_margin_m: float = 0.0
     terminate_on_boundary_violation: bool = True
     braking_preview_margin_m: float = 10.0
-    lateral_speed_safety_factor: float = 0.97
+    lateral_speed_safety_factor: float = 0.90
 
     def __post_init__(self) -> None:
         if not np.isfinite(self.time_step_s) or self.time_step_s <= 0.0:
