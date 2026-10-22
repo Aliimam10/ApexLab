@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 from pathlib import Path
 
 import numpy as np
 
 from .autonomy import (
+    AutonomousLapResult,
     AutonomousSimulationConfig,
     BicycleModel,
     PIDConfig,
@@ -19,6 +21,7 @@ from .autonomy import (
 from .dynamics import default_car
 from .geometry import load_track_csv, preprocess_track
 from .optimisation import optimise_racing_line
+from .plotting import save_autonomous_tracking_plot
 from .source import download_silverstone
 
 
@@ -30,6 +33,24 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-time", type=float, default=180.0, help="Autonomous run time limit in seconds.")
     parser.add_argument("--root", type=Path, default=Path.cwd(), help="ApexLab project root.")
     return parser.parse_args()
+
+
+def write_telemetry_csv(destination: Path, result: AutonomousLapResult) -> None:
+    """Write timestamped autonomous telemetry in a tool-neutral CSV format."""
+
+    telemetry = result.telemetry
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    fields = (
+        "time_s", "x_m", "y_m", "heading_rad", "actual_speed_mps", "target_speed_mps",
+        "steering_command_rad", "actual_steering_rad", "acceleration_command_mps2",
+        "lateral_error_m", "boundary_clearance_m", "lateral_acceleration_mps2",
+        "controller_compute_time_s", "reference_index",
+    )
+    arrays = tuple(getattr(telemetry, field) for field in fields)
+    with destination.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(fields)
+        writer.writerows(zip(*arrays, strict=True))
 
 
 def main() -> None:
@@ -74,6 +95,8 @@ def main() -> None:
         reference_y_m=reference.points_m[:, 1],
         reference_speed_mps=reference.target_speed_mps,
     )
+    write_telemetry_csv(processed / "silverstone_autonomous_lap.csv", result)
+    save_autonomous_tracking_plot(reference, result, root / "output" / "silverstone_autonomous_lap.png")
     summary = {
         "completed_lap": result.completed_lap,
         "failure_reason": result.failure_reason,

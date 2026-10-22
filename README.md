@@ -94,13 +94,16 @@ not replace the existing minimum-time vehicle model.
 uv run python -m racing_line.autonomous_lap
 ```
 
-The command writes `data/processed/silverstone_autonomous_lap.npz` with the
-timestamped actual path, heading, speed, steering, command, tracking-error,
-and boundary-clearance traces, plus a JSON summary. A run is marked complete
-only after one reference-lap length has been tracked; it terminates on a track
-boundary or lateral-friction violation. Its centre-point boundary check uses
-the same declared 1.5 m legal-curb envelope as the existing optimiser; it is
-not yet a four-wheel tracking-limit calculation. This first autonomy slice uses ideal
+The command writes `data/processed/silverstone_autonomous_lap.npz` and CSV
+telemetry with the timestamped actual path, heading, speed, steering, command,
+tracking-error, and boundary-clearance traces; it also writes a JSON summary
+and `output/silverstone_autonomous_lap.png`. The plot compares planned and
+driven paths, target and actual speed, commanded and actual steering, and
+tracking error against boundary clearance. A run is marked complete only after
+one reference-lap length has been tracked; it terminates on a track boundary or
+lateral-friction violation. Its centre-point boundary check uses the same
+declared 1.5 m legal-curb envelope as the existing optimiser; it is not yet a
+four-wheel tracking-limit calculation. This first autonomy slice uses ideal
 state feedback. Sensor noise, actuator delay, Monte Carlo robustness tests,
 and browser replay of the actual path are subsequent extensions.
 

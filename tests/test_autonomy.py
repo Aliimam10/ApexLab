@@ -16,6 +16,8 @@ from racing_line.autonomy import (
 )
 from racing_line.dynamics import CarModel
 from racing_line.geometry import preprocess_track
+from racing_line.autonomous_lap import write_telemetry_csv
+from racing_line.plotting import save_autonomous_tracking_plot
 
 
 def autonomy_car() -> CarModel:
@@ -104,3 +106,23 @@ def test_closed_loop_simulation_completes_a_simple_track() -> None:
     assert result.friction_violations == 0
     assert result.maximum_lateral_error_m < 1.0
     assert result.telemetry.time_s.size > 10
+
+
+def test_autonomy_telemetry_exports_csv_and_plot(tmp_path) -> None:
+    reference = circle_reference()
+    result = simulate_autonomous_lap(
+        reference,
+        autonomy_car(),
+        bicycle=BicycleModel(wheelbase_m=2.8, maximum_speed_mps=40.0),
+        pure_pursuit=PurePursuitConfig(base_lookahead_m=7.0, speed_lookahead_s=0.0, maximum_lookahead_m=7.0),
+        config=AutonomousSimulationConfig(time_step_s=0.04, maximum_time_s=55.0),
+    )
+    csv_path = tmp_path / "telemetry.csv"
+    image_path = tmp_path / "tracking.png"
+
+    write_telemetry_csv(csv_path, result)
+    save_autonomous_tracking_plot(reference, result, image_path)
+
+    assert csv_path.read_text(encoding="utf-8").splitlines()[0].startswith("time_s,x_m,y_m")
+    assert image_path.exists()
+    assert image_path.stat().st_size > 1_000

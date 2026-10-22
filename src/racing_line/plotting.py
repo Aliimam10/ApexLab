@@ -13,6 +13,7 @@ from .dynamics import LapSimulation
 from .energy_planning import EnergySpeedPlan
 from .energy_pareto import EnergyParetoFrontier
 from .optimisation import RacingLineResult
+from .autonomy import AutonomousLapResult, ReferenceTrajectory
 
 
 def save_track_plot(track: ProcessedTrack, destination: Path, *, title: str = "Silverstone") -> None:
@@ -201,5 +202,64 @@ def save_energy_pareto_plot(frontier: EnergyParetoFrontier, destination: Path) -
     axis.set_ylabel("Net battery energy [kWh]")
     axis.set_title("Silverstone fixed-line time-energy Pareto frontier")
     axis.grid(alpha=0.25)
+    figure.savefig(destination, dpi=180)
+    plt.close(figure)
+
+
+def save_autonomous_tracking_plot(
+    trajectory: ReferenceTrajectory, result: AutonomousLapResult, destination: Path
+) -> None:
+    """Render planned-versus-driven path and core closed-loop telemetry."""
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    telemetry = result.telemetry
+    figure, axes = plt.subplots(2, 2, figsize=(13, 9), layout="constrained")
+    path_axis, speed_axis, steering_axis, error_axis = axes.flat
+
+    normals = np.column_stack((np.sin(trajectory.heading_rad), -np.cos(trajectory.heading_rad)))
+    right = trajectory.points_m + trajectory.right_width_m[:, None] * normals
+    left = trajectory.points_m - trajectory.left_width_m[:, None] * normals
+    closed_right = np.vstack((right, right[0]))
+    closed_left = np.vstack((left, left[0]))
+    path_axis.fill(
+        np.concatenate((closed_right[:, 0], closed_left[::-1, 0])),
+        np.concatenate((closed_right[:, 1], closed_left[::-1, 1])),
+        color="#172554",
+        alpha=0.15,
+        label="Legal surface",
+    )
+    path_axis.plot(trajectory.points_m[:, 0], trajectory.points_m[:, 1], color="#2563eb", linewidth=1.6, label="Planned path")
+    path_axis.plot(telemetry.x_m, telemetry.y_m, color="#dc2626", linewidth=1.4, label="Driven path")
+    path_axis.set_aspect("equal", adjustable="box")
+    path_axis.set_xlabel("x [m]")
+    path_axis.set_ylabel("y [m]")
+    path_axis.legend(loc="best")
+
+    speed_axis.plot(telemetry.time_s, telemetry.target_speed_mps * 3.6, color="#2563eb", label="Target speed")
+    speed_axis.plot(telemetry.time_s, telemetry.actual_speed_mps * 3.6, color="#16a34a", label="Actual speed")
+    speed_axis.set_ylabel("Speed [km/h]")
+    speed_axis.legend(loc="best")
+
+    steering_axis.plot(telemetry.time_s, np.rad2deg(telemetry.steering_command_rad), color="#7c3aed", label="Command")
+    steering_axis.plot(telemetry.time_s, np.rad2deg(telemetry.actual_steering_rad), color="#d97706", label="Actual")
+    steering_axis.set_ylabel("Steering [deg]")
+    steering_axis.legend(loc="best")
+
+    error_axis.plot(telemetry.time_s, telemetry.lateral_error_m, color="#dc2626", label="Lateral error")
+    error_axis.plot(telemetry.time_s, telemetry.boundary_clearance_m, color="#0f766e", label="Boundary clearance")
+    error_axis.axhline(0.0, color="#334155", linewidth=0.8)
+    error_axis.set_ylabel("Distance [m]")
+    error_axis.legend(loc="best")
+
+    for axis in axes.flat:
+        axis.grid(alpha=0.25)
+    speed_axis.set_xlabel("Time [s]")
+    steering_axis.set_xlabel("Time [s]")
+    error_axis.set_xlabel("Time [s]")
+    status = "completed" if result.completed_lap else f"failed: {result.failure_reason}"
+    figure.suptitle(
+        "ApexLab autonomous path tracking — "
+        f"{status}; RMS lateral error {result.rms_lateral_error_m:.3f} m"
+    )
     figure.savefig(destination, dpi=180)
     plt.close(figure)
