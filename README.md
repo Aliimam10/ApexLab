@@ -29,6 +29,7 @@ uv run python -m racing_line.optimise_line
 uv run python -m racing_line.plan_energy
 uv run python -m racing_line.pareto_energy
 uv run python -m racing_line.export_web_data
+uv run python -m racing_line.autonomous_lap
 uv run python -m pytest
 ```
 
@@ -55,6 +56,7 @@ uv run python -m racing_line.optimise_line
 uv run python -m racing_line.plan_energy
 uv run python -m racing_line.pareto_energy
 uv run python -m racing_line.export_web_data
+uv run python -m racing_line.autonomous_lap
 ```
 
 ## Interactive replay
@@ -77,6 +79,30 @@ The energy-aware profiles retain the validated fastest racing line and alter
 only the speed/braking plan. Their Pareto points are therefore a comparison of
 the time cost of energy saving on one fixed path, not a new joint
 line-and-energy optimisation.
+
+## Autonomous path-following extension
+
+`autonomous_lap.py` uses the existing optimised path and force-feasible speed
+profile as a reference for a separate feedback simulation. A kinematic bicycle
+model follows the reference using Pure Pursuit steering and a bounded PID speed
+controller. The controller's acceleration request is clipped by the existing
+power, braking, and tyre-force functions; its steering-curvature speed limit
+uses a documented 3% safety margin for discrete actuator response. It does
+not replace the existing minimum-time vehicle model.
+
+```bash
+uv run python -m racing_line.autonomous_lap
+```
+
+The command writes `data/processed/silverstone_autonomous_lap.npz` with the
+timestamped actual path, heading, speed, steering, command, tracking-error,
+and boundary-clearance traces, plus a JSON summary. A run is marked complete
+only after one reference-lap length has been tracked; it terminates on a track
+boundary or lateral-friction violation. Its centre-point boundary check uses
+the same declared 1.5 m legal-curb envelope as the existing optimiser; it is
+not yet a four-wheel tracking-limit calculation. This first autonomy slice uses ideal
+state feedback. Sensor noise, actuator delay, Monte Carlo robustness tests,
+and browser replay of the actual path are subsequent extensions.
 
 ## Centreline vehicle model
 
