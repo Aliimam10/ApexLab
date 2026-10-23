@@ -8,6 +8,15 @@ from pathlib import Path
 
 import numpy as np
 
+from .autonomy import (
+    AutonomousLapResult,
+    AutonomousSimulationConfig,
+    BicycleModel,
+    PIDConfig,
+    PurePursuitConfig,
+    ReferenceTrajectory,
+    simulate_autonomous_lap,
+)
 from .dynamics import LapSimulation, default_car
 from .energy import LapEnergy, analyse_lap_energy
 from .energy_pareto import generate_energy_pareto_frontier
@@ -49,6 +58,35 @@ def _simulation_payload(
     }
 
 
+def _autonomy_payload(result: AutonomousLapResult) -> dict[str, object]:
+    """Serialise a real closed-loop run for the static browser replay."""
+
+    telemetry = result.telemetry
+    return {
+        "completed_lap": result.completed_lap,
+        "failure_reason": result.failure_reason,
+        "completion_time_s": result.completion_time_s,
+        "progress_m": result.progress_m,
+        "boundary_violations": result.boundary_violations,
+        "friction_violations": result.friction_violations,
+        "mean_absolute_lateral_error_m": result.mean_absolute_lateral_error_m,
+        "rms_lateral_error_m": result.rms_lateral_error_m,
+        "maximum_lateral_error_m": result.maximum_lateral_error_m,
+        "actual": {
+            "time_s": _array(telemetry.time_s),
+            "x_m": _array(telemetry.x_m),
+            "y_m": _array(telemetry.y_m),
+            "speed_mps": _array(telemetry.actual_speed_mps),
+            "target_speed_mps": _array(telemetry.target_speed_mps),
+            "steering_rad": _array(telemetry.actual_steering_rad),
+            "acceleration_command_mps2": _array(telemetry.acceleration_command_mps2),
+            "lateral_error_m": _array(telemetry.lateral_error_m),
+            "boundary_clearance_m": _array(telemetry.boundary_clearance_m),
+            "reference_index": telemetry.reference_index.tolist(),
+        },
+    }
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Export ApexLab data for the local 2D viewer.")
     parser.add_argument("--download", action="store_true", help="Download Silverstone source data first.")
@@ -75,6 +113,15 @@ def main() -> None:
         default_car(),
         result.simulation,
         grip_scale=surface.grip_scale,
+    )
+    autonomy_reference = ReferenceTrajectory.from_apexlab(result.track, result.simulation)
+    autonomy = simulate_autonomous_lap(
+        autonomy_reference,
+        default_car(),
+        bicycle=BicycleModel(wheelbase_m=3.6, maximum_speed_mps=default_car().max_speed_mps),
+        pure_pursuit=PurePursuitConfig(base_lookahead_m=12.0, speed_lookahead_s=0.20, maximum_lookahead_m=40.0),
+        pid=PIDConfig(proportional_gain=1.2, integral_gain=0.05),
+        config=AutonomousSimulationConfig(),
     )
     energy_profiles = {}
     pareto_points = []
@@ -111,6 +158,7 @@ def main() -> None:
         },
         "energy_profiles": energy_profiles,
         "pareto": {"points": pareto_points},
+        "autonomy": _autonomy_payload(autonomy),
         "metrics": {
             "improvement_s": result.lap_time_improvement_s,
             "improvement_percent": result.lap_time_improvement_percent,

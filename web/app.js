@@ -45,7 +45,16 @@ function activeProfile() {
   return data.energy_profiles?.[active] ?? data.optimised;
 }
 
+function isAutonomousReplay() {
+  return active === "autonomy" && Boolean(data.autonomy?.actual?.time_s?.length);
+}
+
+function activeLapTime() {
+  return isAutonomousReplay() ? data.autonomy.completion_time_s : activeProfile().lap_time_s;
+}
+
 function activeLabel() {
+  if (isAutonomousReplay()) return "AUTONOMOUS TRACKING";
   if (active === "baseline") return "CENTRELINE BASELINE";
   if (active === "optimised") return "FASTEST PROFILE";
   return activeProfile().label?.toUpperCase() ?? "ENERGY-AWARE PROFILE";
@@ -82,6 +91,7 @@ function init(payload) {
 function configureProfileSelector() {
   document.querySelectorAll("#line-select option").forEach((option) => {
     if (option.value.startsWith("efficient_")) option.disabled = !data.energy_profiles?.[option.value];
+    if (option.value === "autonomy") option.disabled = !data.autonomy?.actual?.time_s?.length;
   });
 }
 
@@ -98,6 +108,18 @@ function widenForDisplay(points) {
   return points.map(([x, y], index) => {
     const [centreX, centreY] = data.track.centreline[index];
     return [centreX + (x - centreX) * DISPLAY_WIDTH_SCALE, centreY + (y - centreY) * DISPLAY_WIDTH_SCALE];
+  });
+}
+
+function autonomousPointsForDisplay() {
+  const actual = data.autonomy.actual;
+  return actual.x_m.map((x, index) => {
+    const referenceIndex = actual.reference_index[index];
+    const [centreX, centreY] = data.track.centreline[referenceIndex];
+    return [
+      centreX + (x - centreX) * DISPLAY_WIDTH_SCALE,
+      centreY + (actual.y_m[index] - centreY) * DISPLAY_WIDTH_SCALE,
+    ];
   });
 }
 
@@ -144,17 +166,22 @@ function drawStatic() {
     drawPath(left, "#f8c64e", 2);
     if (active !== "baseline") drawPath(data.track.centreline, "#c7d1e0", 1, "5 5");
   }
-  const path = map(widenForDisplay(linePoints()));
-  const speeds = activeProfile().speed_mps;
-  const minimum = Math.min(...speeds);
-  const maximum = Math.max(...speeds);
-  path.forEach((point, index) => svg.appendChild(node("line", {
-    x1: point[0], y1: point[1],
-    x2: path[(index + 1) % path.length][0], y2: path[(index + 1) % path.length][1],
-    stroke: showOverlays ? speedColour(speeds[index], minimum, maximum) : "#f8fafc",
-    "stroke-width": showOverlays ? 2.2 : 0.85,
-    "stroke-linecap": "round",
-  })));
+  if (isAutonomousReplay()) {
+    drawPath(widenForDisplay(data.optimised.line), "#55c8ff", 1.15, "5 6");
+    drawPath(autonomousPointsForDisplay(), "#f8fafc", 1.1);
+  } else {
+    const path = map(widenForDisplay(linePoints()));
+    const speeds = activeProfile().speed_mps;
+    const minimum = Math.min(...speeds);
+    const maximum = Math.max(...speeds);
+    path.forEach((point, index) => svg.appendChild(node("line", {
+      x1: point[0], y1: point[1],
+      x2: path[(index + 1) % path.length][0], y2: path[(index + 1) % path.length][1],
+      stroke: showOverlays ? speedColour(speeds[index], minimum, maximum) : "#f8fafc",
+      "stroke-width": showOverlays ? 2.2 : 0.85,
+      "stroke-linecap": "round",
+    })));
+  }
   car = node("g");
   car.appendChild(node("circle", { r: 8, fill: "#fff", stroke: "#07101d", "stroke-width": 3 }));
   car.appendChild(node("path", { d: "M-3,-4 L7,0 L-3,4 Z", fill: "#061320" }));
@@ -162,6 +189,14 @@ function drawStatic() {
 }
 
 function profileData() {
+  if (isAutonomousReplay()) {
+    const actual = data.autonomy.actual;
+    return {
+      times: [0, ...actual.time_s],
+      speeds: [actual.speed_mps[0], ...actual.speed_mps],
+      lapTime: data.autonomy.completion_time_s,
+    };
+  }
   const lap = activeProfile();
   const times = [0];
   const speeds = [lap.speed_mps[0]];
@@ -264,6 +299,10 @@ function drawParetoChart() {
 }
 
 function refreshEnergyPrefix() {
+  if (isAutonomousReplay()) {
+    energyPrefix = [0];
+    return;
+  }
   const energy = activeProfile().energy;
   energyPrefix = [0];
   const draw = energy.battery_draw_segment_j ?? [];
@@ -273,7 +312,7 @@ function refreshEnergyPrefix() {
 
 function updateProfileMarker(time) {
   if (!profileMarker || !data) return;
-  const lapTime = activeProfile().lap_time_s;
+  const lapTime = activeLapTime();
   const clamped = Math.min(Math.max(time, 0), lapTime);
   const position = 58 + (1000 - 58 - 24) * clamped / lapTime;
   profileMarker.setAttribute("x1", position);
@@ -282,6 +321,14 @@ function updateProfileMarker(time) {
 
 function updateValidation() {
   const metrics = data.metrics;
+  if (isAutonomousReplay()) {
+    const autonomy = data.autonomy;
+    const completed = autonomy.completed_lap;
+    $("gain").textContent = `${(autonomy.completion_time_s - data.optimised.lap_time_s).toFixed(3)} s`;
+    $("energy-summary").textContent = "AUTONOMOUS RUN · NO ENERGY MODEL IN THIS REPLAY";
+    $("validation").innerHTML = `<dt>Run status</dt><dd>${completed ? "Completed" : "Stopped"}</dd><dt>Reference lap</dt><dd>${format(data.optimised.lap_time_s)}</dd><dt>Actual lap</dt><dd>${format(autonomy.completion_time_s)}</dd><dt>Time overhead</dt><dd>${(autonomy.completion_time_s - data.optimised.lap_time_s).toFixed(3)} s</dd><dt>Mean abs. error</dt><dd>${autonomy.mean_absolute_lateral_error_m.toFixed(3)} m</dd><dt>RMS error</dt><dd>${autonomy.rms_lateral_error_m.toFixed(3)} m</dd><dt>Max. error</dt><dd>${autonomy.maximum_lateral_error_m.toFixed(3)} m</dd><dt>Boundary violations</dt><dd>${autonomy.boundary_violations}</dd><dt>Friction violations</dt><dd>${autonomy.friction_violations}</dd>`;
+    return;
+  }
   const profile = activeProfile();
   const energy = profile.energy;
   const saved = data.optimised.energy.net_battery_energy_kwh - energy.net_battery_energy_kwh;
@@ -300,6 +347,17 @@ function reset() {
 }
 
 function sampleAtTime(time) {
+  if (isAutonomousReplay()) {
+    const times = data.autonomy.actual.time_s;
+    let low = 0;
+    let high = times.length - 1;
+    while (low < high) {
+      const middle = Math.ceil((low + high) / 2);
+      if (times[middle] <= time) low = middle;
+      else high = middle - 1;
+    }
+    return low;
+  }
   const profile = activeProfile();
   if (time >= profile.lap_time_s - 1e-6) return 0;
   let accumulated = 0;
@@ -311,17 +369,30 @@ function sampleAtTime(time) {
 }
 
 function update(time) {
-  const profile = activeProfile();
   const index = sampleAtTime(time);
-  const position = map(widenForDisplay(linePoints()))[index];
-  car.setAttribute("transform", `translate(${position[0]} ${position[1]})`);
-  const acceleration = profile.acceleration_mps2[index];
-  const speed = profile.speed_mps[index];
-  const recovered = profile.energy.recovered_segment_j?.[index] ?? 0;
+  const autonomous = isAutonomousReplay();
+  const profile = activeProfile();
+  const positions = autonomous ? map(autonomousPointsForDisplay()) : map(widenForDisplay(linePoints()));
+  const position = positions[index];
+  const next = positions[Math.min(index + 1, positions.length - 1)];
+  const heading = Math.atan2(next[1] - position[1], next[0] - position[0]) * 180 / Math.PI;
+  car.setAttribute("transform", `translate(${position[0]} ${position[1]}) rotate(${heading})`);
+  const acceleration = autonomous ? data.autonomy.actual.acceleration_command_mps2[index] : profile.acceleration_mps2[index];
+  const speed = autonomous ? data.autonomy.actual.speed_mps[index] : profile.speed_mps[index];
+  const recovered = autonomous ? 0 : (profile.energy.recovered_segment_j?.[index] ?? 0);
   $("timer").textContent = format(time);
   $("speed").innerHTML = `${Math.round(speed * 3.6)} <small>km/h</small>`;
-  $("live-energy").innerHTML = `${(energyPrefix[index] / 3_600_000).toFixed(3)} <small>kWh</small>`;
-  if (acceleration < -0.15 && recovered > 1.0) {
+  $("live-energy").innerHTML = autonomous ? `— <small>not modelled</small>` : `${(energyPrefix[index] / 3_600_000).toFixed(3)} <small>kWh</small>`;
+  if (autonomous && acceleration < -0.15) {
+    $("state").textContent = "TRACKING / BRAKING";
+    $("state").style.color = "#55c8ff";
+  } else if (autonomous && acceleration > 0.15) {
+    $("state").textContent = "TRACKING / ACCEL";
+    $("state").style.color = "#37d9af";
+  } else if (autonomous) {
+    $("state").textContent = "PATH TRACKING";
+    $("state").style.color = "#f8c64e";
+  } else if (acceleration < -0.15 && recovered > 1.0) {
     $("state").textContent = "REGEN BRAKING";
     $("state").style.color = "#55c8ff";
   } else if (acceleration < -0.15) {
@@ -342,8 +413,8 @@ function tick(now) {
   if (!last) last = now;
   elapsed += ((now - last) / 1000) * rate * 6;
   last = now;
-  if (elapsed >= activeProfile().lap_time_s) {
-    elapsed = activeProfile().lap_time_s;
+  if (elapsed >= activeLapTime()) {
+    elapsed = activeLapTime();
     running = false;
     $("play").textContent = "Replay";
   }

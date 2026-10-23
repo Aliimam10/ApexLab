@@ -70,10 +70,16 @@ python -m http.server 8080 -d web
 ```
 
 Open `http://localhost:8080`. The replay switches between the centreline,
-fastest profile, and independently converged +1%, +3%, and +5% energy-aware
-profiles. It animates the car using calculated segment times and shows the
-live timer, speed, battery energy, regenerative versus friction braking,
-boundary limits, validation metrics, and a time--energy Pareto chart.
+fastest profile, independently converged +1%, +3%, and +5% energy-aware
+profiles, and an **Autonomous tracking** option. That last option replays the
+timestamped path and actual speed from the closed-loop bicycle-model run; the
+dashed blue path is the planned fastest line and the thin white trace is the
+path the controller actually drove. It reports controller tracking and safety
+metrics separately, and deliberately shows no energy value because this
+closed-loop replay does not yet model battery energy. The other profiles
+animate calculated segment times and show live timer, speed, battery energy,
+regenerative versus friction braking, boundary limits, validation metrics, and
+a time--energy Pareto chart.
 
 The energy-aware profiles retain the validated fastest racing line and alter
 only the speed/braking plan. Their Pareto points are therefore a comparison of
@@ -105,7 +111,9 @@ lateral-friction violation. Its centre-point boundary check uses the same
 declared 1.5 m legal-curb envelope as the existing optimiser; it is not yet a
 four-wheel tracking-limit calculation. This first autonomy slice uses ideal
 state feedback. Sensor noise, actuator delay, Monte Carlo robustness tests,
-and browser replay of the actual path are subsequent extensions.
+and Monte Carlo robustness tests are subsequent extensions. The local browser
+viewer now also exports and replays this actual path for direct comparison
+against its planned fastest reference.
 
 ## Centreline vehicle model
 
